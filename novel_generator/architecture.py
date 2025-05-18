@@ -7,7 +7,9 @@ import os
 import json
 import logging
 import traceback
+import time
 from novel_generator.common import invoke_with_cleaning
+from tqdm import tqdm
 from llm_adapters import create_llm_adapter
 from prompt_definitions import (
     core_seed_prompt,
@@ -85,98 +87,154 @@ def Novel_architecture_generate(
         max_tokens=max_tokens,
         timeout=timeout
     )
-    # Step1: 核心种子
-    if "core_seed_result" not in partial_data:
-        logging.info("Step1: Generating core_seed_prompt (核心种子) ...")
-        prompt_core = core_seed_prompt.format(
-            topic=topic,
-            genre=genre,
-            number_of_chapters=number_of_chapters,
-            word_number=word_number,
-            user_guidance=user_guidance  # 修复：添加内容指导
-        )
-        core_seed_result = invoke_with_cleaning(llm_adapter, prompt_core)
-        if not core_seed_result.strip():
-            logging.warning("core_seed_prompt generation failed and returned empty.")
+    
+    # Total steps: Core Seed, Character Dynamics, Initial Character State, World Building, Plot Architecture
+    total_steps = 5
+    
+    with tqdm(total=total_steps, desc="Generating Novel Architecture") as pbar:
+        # Step1: 核心种子
+        if "core_seed_result" not in partial_data:
+            pbar.set_description("Generating Core Seed")
+            logging.info("Step1: Generating core_seed_prompt (核心种子) ...")
+            prompt_core = core_seed_prompt.format(
+                topic=topic,
+                genre=genre,
+                number_of_chapters=number_of_chapters,
+                word_number=word_number,
+                user_guidance=user_guidance  # 修复：添加内容指导
+            )
+            cs_llm_start = time.time()
+            core_seed_result = invoke_with_cleaning(llm_adapter, prompt_core)
+            cs_llm_end = time.time()
+            duration = cs_llm_end - cs_llm_start
+            print(f"    [DEBUG] Core Seed LLM call duration: {duration:.2f} seconds.")
+            if not core_seed_result.strip():
+                logging.warning("core_seed_prompt generation failed and returned empty.")
+                save_partial_architecture_data(filepath, partial_data)
+                return
+            partial_data["core_seed_result"] = core_seed_result
             save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["core_seed_result"] = core_seed_result
-        save_partial_architecture_data(filepath, partial_data)
-    else:
-        logging.info("Step1 already done. Skipping...")
-    # Step2: 角色动力学
-    if "character_dynamics_result" not in partial_data:
-        logging.info("Step2: Generating character_dynamics_prompt ...")
-        prompt_character = character_dynamics_prompt.format(
-            core_seed=partial_data["core_seed_result"].strip(),
-            user_guidance=user_guidance
-        )
-        character_dynamics_result = invoke_with_cleaning(llm_adapter, prompt_character)
-        if not character_dynamics_result.strip():
-            logging.warning("character_dynamics_prompt generation failed.")
+            pbar.update(1)
+        else:
+            logging.info("Step1 already done. Skipping...")
+            pbar.update(1) # Update even if skipped
+            
+        # Step2: 角色动力学
+        if "character_dynamics_result" not in partial_data:
+            pbar.set_description("Generating Character Dynamics")
+            logging.info("Step2: Generating character_dynamics_prompt ...")
+            prompt_character = character_dynamics_prompt.format(
+                core_seed=partial_data["core_seed_result"].strip(),
+                user_guidance=user_guidance
+            )
+            cd_llm_start = time.time()
+            character_dynamics_result = invoke_with_cleaning(llm_adapter, prompt_character)
+            cd_llm_end = time.time()
+            duration = cd_llm_end - cd_llm_start
+            print(f"    [DEBUG] Character Dynamics LLM call duration: {duration:.2f} seconds.")
+            if not character_dynamics_result.strip():
+                logging.warning("character_dynamics_prompt generation failed.")
+                save_partial_architecture_data(filepath, partial_data)
+                return
+            partial_data["character_dynamics_result"] = character_dynamics_result
             save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["character_dynamics_result"] = character_dynamics_result
-        save_partial_architecture_data(filepath, partial_data)
-    else:
-        logging.info("Step2 already done. Skipping...")
-    # 生成初始角色状态
-    if "character_dynamics_result" in partial_data and "character_state_result" not in partial_data:
-        logging.info("Generating initial character state from character dynamics ...")
-        prompt_char_state_init = create_character_state_prompt.format(
-            character_dynamics=partial_data["character_dynamics_result"].strip()
-        )
-        character_state_init = invoke_with_cleaning(llm_adapter, prompt_char_state_init)
-        if not character_state_init.strip():
-            logging.warning("create_character_state_prompt generation failed.")
+            pbar.update(1)
+        else:
+            logging.info("Step2 already done. Skipping...")
+            pbar.update(1) # Update even if skipped
+            
+        # 生成初始角色状态
+        if "character_dynamics_result" in partial_data and "character_state_result" not in partial_data:
+            pbar.set_description("Generating Initial Character State")
+            logging.info("Generating initial character state from character dynamics ...")
+            prompt_char_state_init = create_character_state_prompt.format(
+                character_dynamics=partial_data["character_dynamics_result"].strip()
+            )
+            ics_llm_start = time.time()
+            character_state_init = invoke_with_cleaning(llm_adapter, prompt_char_state_init)
+            ics_llm_end = time.time()
+            duration = ics_llm_end - ics_llm_start
+            print(f"    [DEBUG] Initial Character State LLM call duration: {duration:.2f} seconds.")
+            if not character_state_init.strip():
+                logging.warning("create_character_state_prompt generation failed.")
+                save_partial_architecture_data(filepath, partial_data)
+                return
+            partial_data["character_state_result"] = character_state_init
+            character_state_file = os.path.join(filepath, "character_state.txt")
+            clear_file_content(character_state_file)
+            save_string_to_txt(character_state_init, character_state_file)
             save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["character_state_result"] = character_state_init
-        character_state_file = os.path.join(filepath, "character_state.txt")
-        clear_file_content(character_state_file)
-        save_string_to_txt(character_state_init, character_state_file)
-        save_partial_architecture_data(filepath, partial_data)
-        logging.info("Initial character state created and saved.")
-    # Step3: 世界观
-    if "world_building_result" not in partial_data:
-        logging.info("Step3: Generating world_building_prompt ...")
-        prompt_world = world_building_prompt.format(
-            core_seed=partial_data["core_seed_result"].strip(),
-            user_guidance=user_guidance  # 修复：添加用户指导
-        )
-        world_building_result = invoke_with_cleaning(llm_adapter, prompt_world)
-        if not world_building_result.strip():
-            logging.warning("world_building_prompt generation failed.")
+            logging.info("Initial character state created and saved.")
+            pbar.update(1)
+        elif "character_dynamics_result" in partial_data and "character_state_result" in partial_data:
+             logging.info("Initial character state already done. Skipping...")
+             pbar.update(1) # Update even if skipped
+        else:
+             # This case should ideally not happen if Step 2 is done, but handle for completeness
+             logging.warning("Character dynamics not available to generate initial state. Skipping initial state generation.")
+             pbar.update(1) # Still update to keep progress bar accurate
+
+        # Step3: 世界观
+        if "world_building_result" not in partial_data:
+            pbar.set_description("Generating World Building")
+            logging.info("Step3: Generating world_building_prompt ...")
+            prompt_world = world_building_prompt.format(
+                core_seed=partial_data["core_seed_result"].strip(),
+                user_guidance=user_guidance  # 修复：添加用户指导
+            )
+            wb_llm_start = time.time()
+            world_building_result = invoke_with_cleaning(llm_adapter, prompt_world)
+            wb_llm_end = time.time()
+            duration = wb_llm_end - wb_llm_start
+            print(f"    [DEBUG] World Building LLM call duration: {duration:.2f} seconds.")
+            if not world_building_result.strip():
+                logging.warning("world_building_prompt generation failed.")
+                save_partial_architecture_data(filepath, partial_data)
+                return
+            partial_data["world_building_result"] = world_building_result
             save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["world_building_result"] = world_building_result
-        save_partial_architecture_data(filepath, partial_data)
-    else:
-        logging.info("Step3 already done. Skipping...")
-    # Step4: 三幕式情节
-    if "plot_arch_result" not in partial_data:
-        logging.info("Step4: Generating plot_architecture_prompt ...")
-        prompt_plot = plot_architecture_prompt.format(
-            core_seed=partial_data["core_seed_result"].strip(),
-            character_dynamics=partial_data["character_dynamics_result"].strip(),
-            world_building=partial_data["world_building_result"].strip(),
-            user_guidance=user_guidance  # 修复：添加用户指导
-        )
-        plot_arch_result = invoke_with_cleaning(llm_adapter, prompt_plot)
-        if not plot_arch_result.strip():
-            logging.warning("plot_architecture_prompt generation failed.")
+            pbar.update(1)
+        else:
+            logging.info("Step3 already done. Skipping...")
+            pbar.update(1) # Update even if skipped
+            
+        # Step4: 三幕式情节
+        if "plot_arch_result" not in partial_data:
+            pbar.set_description("Generating Plot Architecture")
+            logging.info("Step4: Generating plot_architecture_prompt ...")
+            prompt_plot = plot_architecture_prompt.format(
+                core_seed=partial_data["core_seed_result"].strip(),
+                character_dynamics=partial_data["character_dynamics_result"].strip(),
+                world_building=partial_data["world_building_result"].strip(),
+                user_guidance=user_guidance  # 修复：添加用户指导
+            )
+            plot_llm_start = time.time()
+            plot_arch_result = invoke_with_cleaning(llm_adapter, prompt_plot)
+            plot_llm_end = time.time()
+            plot_llm_duration = plot_llm_end - plot_llm_start
+            print(f"    [DEBUG] Plot Architecture LLM call duration: {plot_llm_duration:.2f} seconds.")
+            if not plot_arch_result.strip():
+                logging.warning("plot_architecture_prompt generation failed.")
+                save_partial_architecture_data(filepath, partial_data)
+                return
+            partial_data["plot_arch_result"] = plot_arch_result
+            save_partial_start = time.time()
             save_partial_architecture_data(filepath, partial_data)
-            return
-        partial_data["plot_arch_result"] = plot_arch_result
-        save_partial_architecture_data(filepath, partial_data)
-    else:
-        logging.info("Step4 already done. Skipping...")
+            save_partial_end = time.time()
+            save_partial_duration = save_partial_end - save_partial_start
+            print(f"    [DEBUG] Saving partial_architecture.json duration: {save_partial_duration:.2f} seconds.")
+            pbar.update(1)
+        else:
+            logging.info("Step4 already done. Skipping...")
+            pbar.update(1) # Update even if skipped
+
 
     core_seed_result = partial_data["core_seed_result"]
     character_dynamics_result = partial_data["character_dynamics_result"]
     world_building_result = partial_data["world_building_result"]
     plot_arch_result = partial_data["plot_arch_result"]
 
+    save_final_start = time.time()
     final_content = (
         "#=== 0) 小说设定 ===\n"
         f"主题：{topic},类型：{genre},篇幅：约{number_of_chapters}章（每章{word_number}字）\n\n"
@@ -193,6 +251,9 @@ def Novel_architecture_generate(
     arch_file = os.path.join(filepath, "Novel_architecture.txt")
     clear_file_content(arch_file)
     save_string_to_txt(final_content, arch_file)
+    save_final_end = time.time()
+    save_final_duration = save_final_end - save_final_start
+    print(f"    [DEBUG] Saving Novel_architecture.txt duration: {save_final_duration:.2f} seconds.")
     logging.info("Novel_architecture.txt has been generated successfully.")
 
     partial_arch_file = os.path.join(filepath, "partial_architecture.json")

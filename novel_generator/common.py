@@ -44,11 +44,11 @@ def debug_log(prompt: str, response_content: str):
 
 def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3) -> str:
     """调用 LLM 并清理返回结果"""
-    print("\n" + "="*50)
-    print("发送到 LLM 的提示词:")
-    print("-"*50)
-    print(prompt)
-    print("="*50 + "\n")
+    # print("\n" + "="*50)
+    # print("发送到 LLM 的提示词:")
+    # print("-"*50)
+    # print(prompt)
+    # print("="*50 + "\n")
     
     result = ""
     retry_count = 0
@@ -56,11 +56,11 @@ def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3) -> str:
     while retry_count < max_retries:
         try:
             result = llm_adapter.invoke(prompt)
-            print("\n" + "="*50)
-            print("LLM 返回的内容:")
-            print("-"*50)
-            print(result)
-            print("="*50 + "\n")
+            # print("\n" + "="*50)
+            # print("LLM 返回的内容:")
+            # print("-"*50)
+            # print(result)
+            # print("="*50 + "\n")
             
             # 清理结果中的特殊格式标记
             result = result.replace("```", "").strip()
