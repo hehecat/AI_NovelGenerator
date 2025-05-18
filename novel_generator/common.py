@@ -44,11 +44,11 @@ def debug_log(prompt: str, response_content: str):
 
 def invoke_with_cleaning(llm_adapter, prompt: str, max_retries: int = 3) -> str:
     """调用 LLM 并清理返回结果"""
-    # print("\n" + "="*50)
-    # print("发送到 LLM 的提示词:")
-    # print("-"*50)
-    # print(prompt)
-    # print("="*50 + "\n")
+    print("\n" + "="*50)
+    print("发送到 LLM 的提示词:")
+    print("-"*50)
+    print(prompt)
+    print("="*50 + "\n")
     
     result = ""
     retry_count = 0
