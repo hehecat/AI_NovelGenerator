@@ -149,11 +149,82 @@ novel-generator/
 ---
 
 ## 🚀 运行说明
-### **方式 1：使用 Python 解释器**
+### **方式 1：使用 Python 解释器 (GUI)**
 ```bash
 python main.py
 ```
 执行后，GUI 将会启动，你可以在图形界面中进行各项操作。
+
+### **方式 2：使用命令行工具 (CLI)**
+新增的 CLI 工具提供了通过命令行参数控制小说生成的各项功能。请确保您已按照 [环境准备](#-环境准备) 部分的要求配置好环境。
+
+**基本用法:**
+```bash
+python cli.py <command> [options]
+```
+
+**可用命令:**
+
+1.  **配置管理 (`config`)**
+    *   显示当前配置: `python cli.py config --show`
+    *   设置配置项: `python cli.py config --set <KEY> <VALUE>`
+        例如: `python cli.py config --set api_key YOUR_OPENAI_API_KEY`
+        配置文件默认保存在项目根目录下的 `config.json`。
+
+2.  **生成小说架构 (`generate-architecture`)**
+    ```bash
+    python cli.py generate-architecture --topic "赛博朋克侦探故事" --genre "科幻悬疑" --filepath "./my_novel_project"
+    ```
+    *   `--filepath`: 项目文件保存路径 (默认: `./novel_project`)。
+    *   `--topic`: 小说主题 (必需)。
+    *   `--genre`: 小说类型 (必需)。
+    *   `--num_chapters`: 章节数量 (默认: 10)。
+    *   `--word_number`: 每章大致字数 (默认: 3000)。
+    *   `--user_guidance`: 用户自定义生成指导。
+    *   其他 LLM 相关参数如 `--api_key`, `--model_name` 等可通过命令行覆盖，或从 `config.json` 读取。
+
+3.  **生成章节蓝图 (`generate-blueprint`)**
+    ```bash
+    python cli.py generate-blueprint --filepath "./my_novel_project"
+    ```
+    *   `--filepath`: 项目文件路径，需包含 `novel_architecture.md` (默认: `./novel_project`)。
+    *   `--user_guidance`: 用户自定义生成指导。
+    *   LLM 参数同上。
+
+4.  **生成章节草稿 (`generate-chapter`)**
+    ```bash
+    python cli.py generate-chapter --filepath "./my_novel_project" --chapter_num 1
+    ```
+    *   `--filepath`: 项目文件路径 (默认: `./novel_project`)。
+    *   `--chapter_num`: 要生成的章节号 (必需)。
+    *   `--word_number`: 本章大致字数 (默认: 3000)。
+    *   `--user_guidance`: 本章的用户指导。
+    *   `--characters_involved`, `--key_items`, `--scene_location`, `--time_constraint`: 章节特定元素。
+    *   LLM 及 Embedding 相关参数同上或可通过命令行指定。
+
+5.  **导入知识文件 (`import-knowledge`)**
+    ```bash
+    python cli.py import-knowledge --filepath "./my_novel_project" --knowledge_file "worldbuilding.md"
+    ```
+    *   `--filepath`: 项目文件路径 (默认: `./novel_project`)。
+    *   `--knowledge_file`: 要导入的知识文件名 (例如 `worldbuilding.md`, `characters.md`)。CLI会首先在项目路径下查找，如果找不到，会尝试在项目根目录的 `事例` 文件夹下查找。
+    *   Embedding 相关参数同上或可通过命令行指定。
+
+6.  **清空向量数据库 (`clear-vectorstore`)**
+    ```bash
+    python cli.py clear-vectorstore --filepath "./my_novel_project"
+    ```
+    *   `--filepath`: 项目文件路径 (默认: `./novel_project`)。
+
+**获取帮助:**
+```bash
+python cli.py --help
+python cli.py <command> --help
+```
+例如，查看 `generate-architecture` 命令的帮助：
+```bash
+python cli.py generate-architecture --help
+```
 
 ### **方式 2：打包为可执行文件**
 如果你想在无 Python 环境的机器上使用本工具，可以使用 **PyInstaller** 进行打包：
