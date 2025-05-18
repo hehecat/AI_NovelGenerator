@@ -88,9 +88,13 @@ def Novel_architecture_generate(
         timeout=timeout
     )
     
-    # Total steps: Core Seed, Character Dynamics, Initial Character State, World Building, Plot Architecture
-    total_steps = 5
-    
+    CHAPTERS_PER_VOLUME = 100 # Define chapters per volume
+    # Assuming target_total_chapters is available as number_of_chapters
+    num_volumes = (number_of_chapters + CHAPTERS_PER_VOLUME - 1) // CHAPTERS_PER_VOLUME
+
+    # Total steps: Core Seed, Character Dynamics, Initial Character State, World Building, Volume Outline
+    total_steps = 5 # Reverted total steps back to 5
+
     with tqdm(total=total_steps, desc="Generating Novel Architecture") as pbar:
         # Step1: 核心种子
         if "core_seed_result" not in partial_data:
@@ -198,41 +202,43 @@ def Novel_architecture_generate(
             logging.info("Step3 already done. Skipping...")
             pbar.update(1) # Update even if skipped
             
-        # Step4: 三幕式情节
-        if "plot_arch_result" not in partial_data:
-            pbar.set_description("Generating Plot Architecture")
-            logging.info("Step4: Generating plot_architecture_prompt ...")
-            prompt_plot = plot_architecture_prompt.format(
+        # Step4: 生成分卷大纲
+        if "volume_outline_result" not in partial_data:
+            pbar.set_description("Generating Volume Outline")
+            logging.info("Step4: Generating volume outline ...")
+            # Define the prompt string directly for now
+            volume_outline_prompt_str = plot_architecture_prompt
+            prompt_volume_outline = volume_outline_prompt_str.format(
+                num_volumes=num_volumes,
+                chapters_per_volume=CHAPTERS_PER_VOLUME,
                 core_seed=partial_data["core_seed_result"].strip(),
                 character_dynamics=partial_data["character_dynamics_result"].strip(),
                 world_building=partial_data["world_building_result"].strip(),
-                user_guidance=user_guidance  # 修复：添加用户指导
+                user_guidance=user_guidance
             )
-            plot_llm_start = time.time()
-            plot_arch_result = invoke_with_cleaning(llm_adapter, prompt_plot)
-            plot_llm_end = time.time()
-            plot_llm_duration = plot_llm_end - plot_llm_start
-            print(f"    [DEBUG] Plot Architecture LLM call duration: {plot_llm_duration:.2f} seconds.")
-            if not plot_arch_result.strip():
-                logging.warning("plot_architecture_prompt generation failed.")
+            vo_llm_start = time.time()
+            volume_outline_result = invoke_with_cleaning(llm_adapter, prompt_volume_outline)
+            vo_llm_end = time.time()
+            duration = vo_llm_end - vo_llm_start
+            print(f"    [DEBUG] Volume Outline LLM call duration: {duration:.2f} seconds.")
+            if not volume_outline_result.strip():
+                logging.warning("volume outline generation failed.")
                 save_partial_architecture_data(filepath, partial_data)
                 return
-            partial_data["plot_arch_result"] = plot_arch_result
-            save_partial_start = time.time()
+            partial_data["volume_outline_result"] = volume_outline_result
             save_partial_architecture_data(filepath, partial_data)
-            save_partial_end = time.time()
-            save_partial_duration = save_partial_end - save_partial_start
-            print(f"    [DEBUG] Saving partial_architecture.json duration: {save_partial_duration:.2f} seconds.")
             pbar.update(1)
         else:
             logging.info("Step4 already done. Skipping...")
             pbar.update(1) # Update even if skipped
 
+       
 
     core_seed_result = partial_data["core_seed_result"]
     character_dynamics_result = partial_data["character_dynamics_result"]
     world_building_result = partial_data["world_building_result"]
-    plot_arch_result = partial_data["plot_arch_result"]
+    # plot_arch_result = partial_data["plot_arch_result"] # Removed
+    volume_outline_result = partial_data["volume_outline_result"] # Added
 
     save_final_start = time.time()
     final_content = (
@@ -244,8 +250,8 @@ def Novel_architecture_generate(
         f"{character_dynamics_result}\n\n"
         "#=== 3) 世界观 ===\n"
         f"{world_building_result}\n\n"
-        "#=== 4) 三幕式情节架构 ===\n"
-        f"{plot_arch_result}\n"
+        "#=== 4) 分卷大纲 ===\n" 
+        f"{volume_outline_result}\n"
     )
 
     arch_file = os.path.join(filepath, "Novel_architecture.txt")
