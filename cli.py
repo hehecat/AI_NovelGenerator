@@ -5,6 +5,8 @@ import json
 import config_manager
 import novel_generator.architecture
 import novel_generator.blueprint
+from chapter_directory_parser import get_chapter_info_from_blueprint
+from utils import read_file, save_string_to_txt
 
 def main():
     parser = argparse.ArgumentParser(description="AI小说生成器命令行工具")
@@ -16,7 +18,7 @@ def main():
     parser_architecture.add_argument("--output", required=True, help="保存架构文件的目录")
     parser_architecture.add_argument("--topic", default="未命名小说", help="小说主题（默认：未命名小说）")
     parser_architecture.add_argument("--genre", default="奇幻", help="小说类型（默认：奇幻）")
-    parser_architecture.add_argument("--chapters", type=int, default=20, help="章节数量（默认：20）")
+    parser_architecture.add_argument("--chapters", type=int, default=200, help="章节数量（默认：20）")
     parser_architecture.add_argument("--words", type=int, default=100000, help="预计总字数（默认：100000）")
     parser_architecture.add_argument("--guidance", default="", help="用户指导说明（可选）")
     parser_architecture.add_argument("--temperature", type=float, default=0.7, help="生成温度（默认：0.7）")
@@ -31,6 +33,19 @@ def main():
     parser_blueprint.add_argument("--volume", required=True, help="卷号（1-N）或 'all'")
     parser_blueprint.add_argument("--output", required=True, help="保存蓝图文件的目录")
     parser_blueprint.set_defaults(func=generate_blueprint_command)
+
+    # 添加 generate-chapter 命令
+    parser_chapter = subparsers.add_parser("generate-chapter", help="生成指定章节内容")
+    parser_chapter.add_argument("--config", default="config.json", help="配置文件的路径（默认：config.json）")
+    parser_chapter.add_argument("--output", required=True, help="保存章节文件的目录")
+    parser_chapter.add_argument("--volume", type=int, required=True, help="卷号（1-N）")
+    parser_chapter.add_argument("--chapter", type=int, required=True, help="章节号")
+    parser_chapter.add_argument("--words", type=int, default=2000, help="目标字数（默认：2000）")
+    parser_chapter.add_argument("--guidance", default="", help="用户指导说明（可选）")
+    parser_chapter.add_argument("--temperature", type=float, default=0.7, help="生成温度（默认：0.7）")
+    parser_chapter.add_argument("--max-tokens", type=int, default=2048, help="最大token数（默认：100000）")
+    parser_chapter.add_argument("--timeout", type=int, default=600, help="超时时间（秒）（默认：600）")
+    parser_chapter.set_defaults(func=generate_chapter_command)
 
     args = parser.parse_args()
 
@@ -195,6 +210,80 @@ def generate_blueprint_command(args):
         """)
     except Exception as e:
         print(f"生成蓝图时发生错误: {e}")
+
+def generate_chapter_command(args):
+    print(f"正在生成第 {args.volume} 卷第 {args.chapter} 章，使用配置文件: {args.config}")
+    try:
+        # 检查配置文件是否存在
+        if not os.path.exists(args.config):
+            print(f"错误：配置文件 {args.config} 不存在")
+            return
+
+        # 加载配置
+        config = config_manager.load_config(args.config)
+
+        # 获取 LLM 配置
+        last_interface_format = config.get("last_interface_format", "OpenAI")
+        llm_config = config.get("llm_configs", {}).get(last_interface_format, {})
+        
+        if not llm_config:
+            raise KeyError(f"在 llm_configs 中未找到 {last_interface_format} 的配置")
+
+        # 确保输出目录存在
+        os.makedirs(args.output, exist_ok=True)
+
+        # 检查卷章节目录文件是否存在
+        volume_blueprint_file = os.path.join(args.output, f"Novel_directory_vol{args.volume}.txt")
+        if not os.path.exists(volume_blueprint_file):
+            print(f"错误：卷章节目录文件 {volume_blueprint_file} 不存在")
+            print("请先生成该卷的章节蓝图")
+            return
+
+        # 从卷章节目录中获取章节信息
+        blueprint_text = read_file(volume_blueprint_file)
+        chapter_info = get_chapter_info_from_blueprint(blueprint_text, args.chapter)
+        
+        if not chapter_info:
+            print(f"错误：在第 {args.volume} 卷的章节目录中未找到第 {args.chapter} 章的信息")
+            return
+
+        # 调用章节生成函数
+        from novel_generator.chapter import generate_chapter_draft
+        chapter_content = generate_chapter_draft(
+            api_key=llm_config.get("api_key"),
+            base_url=llm_config.get("base_url"),
+            model_name=llm_config.get("model_name"),
+            filepath=args.output,
+            novel_number=args.chapter,
+            word_number=args.words,
+            temperature=args.temperature,
+            user_guidance=args.guidance,
+            characters_involved=chapter_info.get("characters_involved", ""),
+            key_items=chapter_info.get("key_items", ""),
+            scene_location=chapter_info.get("scene_location", ""),
+            time_constraint=chapter_info.get("time_constraint", ""),
+            embedding_api_key=llm_config.get("embedding_api_key"),
+            embedding_url=llm_config.get("embedding_url"),
+            embedding_interface_format=llm_config.get("embedding_interface_format"),
+            embedding_model_name=llm_config.get("embedding_model_name"),
+            interface_format=last_interface_format,
+            max_tokens=args.max_tokens,
+            timeout=args.timeout
+        )
+
+        # 保存章节内容
+        chapters_dir = os.path.join(args.output, "chapters")
+        os.makedirs(chapters_dir, exist_ok=True)
+        chapter_file = os.path.join(chapters_dir, f"chapter_{args.chapter}.txt")
+        save_string_to_txt(chapter_content, chapter_file)
+        print(f"章节内容已保存到 {chapter_file}")
+
+    except FileNotFoundError:
+        print(f"错误：未找到必要的文件")
+    except KeyError as e:
+        print(f"错误：配置文件中缺少必要的参数: {e}")
+    except Exception as e:
+        print(f"生成章节时发生错误: {e}")
 
 def parse_chapter_input(chapter_input, architecture_data):
     """解析章节输入字符串（'all'、'number' 或 'range'）"""

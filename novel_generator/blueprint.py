@@ -13,7 +13,7 @@ from utils import read_file, clear_file_content, save_string_to_txt
 
 def compute_chunk_size(number_of_chapters: int, max_tokens: int) -> int:
     """
-    基于“每章约100 tokens”的粗略估算，
+    基于"每章约100 tokens"的粗略估算，
     再结合当前max_tokens，计算分块大小：
       chunk_size = (floor(max_tokens/100/10)*10) - 10
     并确保 chunk_size 不会小于1或大于实际章节数。
@@ -76,16 +76,17 @@ def Chapter_blueprint_generate(
     api_key: str,
     base_url: str,
     llm_model: str,
-    save_path: str, # Added save_path
+    save_path: str,
     user_guidance: str = "",
-    target_chapter: int = 100, # Added target_chapter
+    target_chapter: int = 100,
+    target_volume: int = 1,  # 目标卷
     temperature: float = 0.7,
     max_tokens: int = 4096,
     timeout: int = 600
 ) -> None:
     """
     按卷生成章节蓝图。
-    读取指定的架构文件，解析包含 target_chapter 的卷的大纲和里程碑，并基于此生成该卷的章节蓝图。
+    读取指定的架构文件，生成目标卷的章节蓝图。
     若对应卷的蓝图文件已存在且内容非空，则表示可能是之前的部分生成结果；
       解析其中已有的章节数，从下一个章节继续分块生成；
       对于已有章节目录，传入时仅保留最近100章目录，避免prompt过长。
@@ -109,7 +110,7 @@ def Chapter_blueprint_generate(
     volume_title = "未找到卷标题" # 默认值
     start_chapter = None
     end_chapter = None
-    volume_summary = f"目标章节 {target_chapter} 未在任何卷的范围内找到。" # 默认值
+    volume_summary = "未能找到本卷的核心情节概述。" # 默认值
     character_arcs = "未能找到主要角色发展弧光。" # 默认值
     ending_cliffhanger = "未能找到本卷结局状态/悬念。" # 默认值
     milestones_list = []
@@ -124,25 +125,25 @@ def Chapter_blueprint_generate(
 
     for volume_match in re.finditer(volume_pattern_all, architecture_text, re.DOTALL | re.IGNORECASE):
         try:
-            # --- 方案一：对应修改后的捕获组索引 ---
             current_volume_number = int(volume_match.group(1))
             current_volume_title = volume_match.group(2).strip()
             current_start_chapter = int(volume_match.group(3))
             current_end_chapter = int(volume_match.group(4))
         except (IndexError, ValueError) as e:
             print(f"警告：解析卷基本信息（卷号、标题、章节范围）时出错，跳过此卷。错误：{e}")
-            print(f"问题匹配内容片段：{volume_match.group(0)[:200]}...") # 打印更长的片段帮助调试
-            continue # 跳过这个格式不正确的卷
+            print(f"问题匹配内容片段：{volume_match.group(0)[:200]}...")
+            continue
 
-        if current_start_chapter <= target_chapter <= current_end_chapter:
+        # 修改判断逻辑：优先使用target_volume
+        if current_volume_number == target_volume:
             volume_number = current_volume_number
-            volume_title = current_volume_title # 使用从主正则捕获的标题
+            volume_title = current_volume_title
             start_chapter = current_start_chapter
             end_chapter = current_end_chapter
 
             # 获取整个匹配到的卷的文本内容，用于提取内部细节
             volume_content = volume_match.group(0)
-
+            
             # 提取核心情节概述
             summary_pattern = r"-\s*\*\*(本卷核心情节概述|Core Plot Summary)：\*\*\s*(.*?)(?=\n-\s*\*\*|\Z)"
             summary_match = re.search(summary_pattern, volume_content, re.DOTALL | re.IGNORECASE)
@@ -171,24 +172,11 @@ def Chapter_blueprint_generate(
             else:
                 milestones_list = []
 
-            break # 找到了正确的卷，不需要继续迭代
+            break  # 找到目标卷后直接退出循环
 
-    # 返回包含所有提取信息的字典
-    # (注意，这里你之前的代码有一个 print 语句，我将其改为 return 语句，
-    # 因为函数通常应该返回数据而不是直接打印，除非打印是其主要目的)
-    print({
-       "volume_number": volume_number,
-        "volume_title": volume_title,
-        "start_chapter": start_chapter,
-        "end_chapter": end_chapter,
-        "volume_summary": volume_summary,
-        "character_arcs": character_arcs,
-        "ending_cliffhanger": ending_cliffhanger,
-        "milestones_list": milestones_list
-    }) 
-
+    # 检查是否找到目标卷
     if volume_number is None:
-        logging.error(f"Could not find a volume containing chapter {target_chapter} in the architecture file.")
+        logging.error(f"在架构文件中未找到第 {target_volume} 卷。")
         return
 
     volume_chapter_count = end_chapter - start_chapter + 1
