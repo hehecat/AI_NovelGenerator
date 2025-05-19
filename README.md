@@ -187,7 +187,7 @@ python cli.py <command> [options]
     ```bash
     python cli.py generate-blueprint --filepath "./my_novel_project"
     ```
-    *   `--filepath`: 项目文件路径，需包含 `novel_architecture.md` (默认: `./novel_project`)。
+    *   `--filepath`: 项目文件路径，需包含 `Novel_architecture.txt` (默认: `./novel_project`)。
     *   `--user_guidance`: 用户自定义生成指导。
     *   LLM 参数同上。
 

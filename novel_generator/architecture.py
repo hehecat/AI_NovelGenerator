@@ -61,7 +61,7 @@ def Novel_architecture_generate(
     temperature: float = 0.7,
     max_tokens: int = 2048,
     timeout: int = 600
-) -> None:
+) -> dict:  # 修改返回类型为 dict
     """
     依次调用:
       1. core_seed_prompt
@@ -220,7 +220,7 @@ def Novel_architecture_generate(
             volume_outline_result = invoke_with_cleaning(llm_adapter, prompt_volume_outline)
             vo_llm_end = time.time()
             duration = vo_llm_end - vo_llm_start
-            print(f"    [DEBUG] Volume Outline LLM call duration: {duration:.2f} seconds.")
+            print("volume_outline_result",volume_outline_result)
             if not volume_outline_result.strip():
                 logging.warning("volume outline generation failed.")
                 save_partial_architecture_data(filepath, partial_data)
@@ -266,3 +266,16 @@ def Novel_architecture_generate(
     if os.path.exists(partial_arch_file):
         os.remove(partial_arch_file)
         logging.info("partial_architecture.json removed (all steps completed).")
+
+    # 返回生成的数据
+    return {
+        "topic": topic,
+        "genre": genre,
+        "num_volumes": num_volumes,
+        "number_of_chapters": number_of_chapters,
+        "word_number": word_number,
+        "core_seed": core_seed_result,
+        "character_dynamics": character_dynamics_result,
+        "world_building": world_building_result,
+        "volume_outline": volume_outline_result
+    }

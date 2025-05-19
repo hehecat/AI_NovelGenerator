@@ -12,15 +12,23 @@ def main():
 
     # generate-architecture 命令
     parser_architecture = subparsers.add_parser("generate-architecture", help="生成小说整体架构")
-    parser_architecture.add_argument("--config", required=True, help="配置文件的路径")
+    parser_architecture.add_argument("--config", default="config.json", help="配置文件的路径（默认：config.json）")
     parser_architecture.add_argument("--output", required=True, help="保存架构文件的目录")
+    parser_architecture.add_argument("--topic", default="未命名小说", help="小说主题（默认：未命名小说）")
+    parser_architecture.add_argument("--genre", default="奇幻", help="小说类型（默认：奇幻）")
+    parser_architecture.add_argument("--chapters", type=int, default=20, help="章节数量（默认：20）")
+    parser_architecture.add_argument("--words", type=int, default=100000, help="预计总字数（默认：100000）")
+    parser_architecture.add_argument("--guidance", default="", help="用户指导说明（可选）")
+    parser_architecture.add_argument("--temperature", type=float, default=0.7, help="生成温度（默认：0.7）")
+    parser_architecture.add_argument("--max-tokens", type=int, default=2048, help="最大token数（默认：2048）")
+    parser_architecture.add_argument("--timeout", type=int, default=600, help="超时时间（秒）（默认：600）")
     parser_architecture.set_defaults(func=generate_architecture_command)
 
     # generate-blueprint 命令
     parser_blueprint = subparsers.add_parser("generate-blueprint", help="生成章节蓝图")
-    parser_blueprint.add_argument("--config", required=True, help="配置文件的路径")
+    parser_blueprint.add_argument("--config", default="config.json", help="配置文件的路径（默认：config.json）")
     parser_blueprint.add_argument("--architecture", required=True, help="架构文件的路径")
-    parser_blueprint.add_argument("--chapter", required=True, help="章节号、范围（例如，1-5）或 'all'")
+    parser_blueprint.add_argument("--volume", required=True, help="卷号（1-N）或 'all'")
     parser_blueprint.add_argument("--output", required=True, help="保存蓝图文件的目录")
     parser_blueprint.set_defaults(func=generate_blueprint_command)
 
@@ -34,67 +42,157 @@ def main():
 def generate_architecture_command(args):
     print(f"正在使用配置文件生成架构: {args.config}")
     try:
+        # 检查配置文件是否存在
+        if not os.path.exists(args.config):
+            print(f"错误：配置文件 {args.config} 不存在")
+            print("请确保在项目目录下存在 config.json 文件，或使用 --config 参数指定配置文件路径")
+            return
+
         # 加载配置
-        config = config_manager.load_config(args.config) # 假设 load_config 存在
+        config = config_manager.load_config(args.config)
+
+        # 获取 LLM 配置
+        last_interface_format = config.get("last_interface_format", "OpenAI")
+        llm_config = config.get("llm_configs", {}).get(last_interface_format, {})
+        
+        if not llm_config:
+            raise KeyError(f"在 llm_configs 中未找到 {last_interface_format} 的配置")
 
         # 确保输出目录存在
         os.makedirs(args.output, exist_ok=True)
 
         # 调用架构生成函数
-        # 假设 novel_generator.architecture 有类似 generate_architecture 的函数
-        architecture_data = novel_generator.architecture.generate_architecture(config)
+        architecture_data = novel_generator.architecture.Novel_architecture_generate(
+            interface_format=last_interface_format,
+            api_key=llm_config.get("api_key"),
+            base_url=llm_config.get("base_url"),
+            llm_model=llm_config.get("model_name"),
+            topic=args.topic,
+            genre=args.genre,
+            number_of_chapters=args.chapters,
+            word_number=args.words,
+            filepath=args.output,
+            user_guidance=args.guidance,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            timeout=args.timeout
+        )
 
-        # 保存架构数据
-        output_path = os.path.join(args.output, "architecture.json") # 假设输出为 JSON 格式
+        # 保存架构数据到 JSON 文件
+        output_path = os.path.join(args.output, "architecture.json")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(architecture_data, f, indent=4, ensure_ascii=False)
 
-        print(f"架构已保存到 {output_path}")
+        print(f"架构数据已保存到 {output_path}")
 
     except FileNotFoundError:
         print(f"错误：在 {args.config} 未找到配置文件")
+    except KeyError as e:
+        print(f"错误：配置文件中缺少必要的参数: {e}")
+        print("请确保 config.json 包含以下结构：")
+        print("""
+{
+    "last_interface_format": "OpenAI",
+    "llm_configs": {
+        "OpenAI": {
+            "api_key": "你的API密钥",
+            "base_url": "API的基础URL",
+            "model_name": "使用的模型名称"
+        }
+    }
+}
+        """)
     except Exception as e:
         print(f"生成架构时发生错误: {e}")
 
 
 def generate_blueprint_command(args):
-    print(f"正在为章节 {args.chapter} 生成蓝图，使用配置文件: {args.config} 和架构文件: {args.architecture}")
+    print(f"正在生成蓝图，使用配置文件: {args.config} 和架构文件: {args.architecture}")
     try:
-        # 加载配置
-        config = config_manager.load_config(args.config) # 假设 load_config 存在
-
-        # 读取架构文件
-        with open(args.architecture, "r", encoding="utf-8") as f:
-            architecture_data = json.load(f) # 假设架构文件为 JSON 格式
-
-        # 解析章节输入
-        chapters_to_generate = parse_chapter_input(args.chapter, architecture_data)
-
-        if not chapters_to_generate:
-            print(f"未找到有效的章节输入: {args.chapter}")
+        # 检查配置文件是否存在
+        if not os.path.exists(args.config):
+            print(f"错误：配置文件 {args.config} 不存在")
+            print("请确保在项目目录下存在 config.json 文件，或使用 --config 参数指定配置文件路径")
             return
+
+        # 加载配置
+        config = config_manager.load_config(args.config)
+
+        # 获取 LLM 配置
+        last_interface_format = config.get("last_interface_format", "OpenAI")
+        llm_config = config.get("llm_configs", {}).get(last_interface_format, {})
+        
+        if not llm_config:
+            raise KeyError(f"在 llm_configs 中未找到 {last_interface_format} 的配置")
 
         # 确保输出目录存在
         os.makedirs(args.output, exist_ok=True)
 
-        # 遍历并为指定章节生成蓝图
-        for chapter_num in chapters_to_generate:
-            print(f"正在为第 {chapter_num} 章生成蓝图...")
-            # 假设 novel_generator.blueprint 有类似 generate_blueprint 的函数
-            # 该函数可能需要配置、架构数据和特定章节号/数据
-            blueprint_data = novel_generator.blueprint.generate_blueprint(config, architecture_data, chapter_num)
-
-            # 保存蓝图数据
-            output_path = os.path.join(args.output, f"blueprint_chapter_{chapter_num}.json") # 假设输出为 JSON 格式
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(blueprint_data, f, indent=4, ensure_ascii=False)
-
-            print(f"第 {chapter_num} 章的蓝图已保存到 {output_path}")
+        # 解析卷号输入
+        if args.volume.lower() == "all":
+            # 如果是 "all"，则生成所有卷的蓝图
+            # 这里需要从架构文件中获取卷数
+            with open(args.architecture, "r", encoding="utf-8") as f:
+                architecture_data = json.load(f)
+            num_volumes = architecture_data.get("num_volumes", 1)
+            
+            for volume in range(1, num_volumes + 1):
+                print(f"正在生成第 {volume} 卷的蓝图...")
+                novel_generator.blueprint.Chapter_blueprint_generate(
+                    interface_format=last_interface_format,
+                    api_key=llm_config.get("api_key"),
+                    base_url=llm_config.get("base_url"),
+                    llm_model=llm_config.get("model_name"),
+                    save_path=args.output,
+                    user_guidance=config.get("other_params", {}).get("user_guidance", ""),
+                    target_volume=volume,
+                    temperature=llm_config.get("temperature", 0.7),
+                    max_tokens=llm_config.get("max_tokens", 4096),
+                    timeout=llm_config.get("timeout", 600)
+                )
+        else:
+            # 如果是具体卷号，则生成对应卷的蓝图
+            try:
+                volume = int(args.volume)
+                if volume < 1:
+                    raise ValueError("卷号必须大于0")
+                
+                print(f"正在生成第 {volume} 卷的蓝图...")
+                novel_generator.blueprint.Chapter_blueprint_generate(
+                    interface_format=last_interface_format,
+                    api_key=llm_config.get("api_key"),
+                    base_url=llm_config.get("base_url"),
+                    llm_model=llm_config.get("model_name"),
+                    save_path=args.output,
+                    user_guidance=config.get("other_params", {}).get("user_guidance", ""),
+                    target_volume=volume,
+                    temperature=llm_config.get("temperature", 0.7),
+                    max_tokens=llm_config.get("max_tokens", 4096),
+                    timeout=llm_config.get("timeout", 600)
+                )
+            except ValueError as e:
+                print(f"错误：无效的卷号格式: {args.volume}。请使用数字（大于0）或 'all'。")
+                return
 
     except FileNotFoundError:
         print(f"错误：未找到文件（{args.config} 或 {args.architecture}）")
     except json.JSONDecodeError:
         print(f"错误：无法解析架构文件 {args.architecture} 中的 JSON 数据")
+    except KeyError as e:
+        print(f"错误：配置文件中缺少必要的参数: {e}")
+        print("请确保 config.json 包含以下结构：")
+        print("""
+{
+    "last_interface_format": "OpenAI",
+    "llm_configs": {
+        "OpenAI": {
+            "api_key": "你的API密钥",
+            "base_url": "API的基础URL",
+            "model_name": "使用的模型名称"
+        }
+    }
+}
+        """)
     except Exception as e:
         print(f"生成蓝图时发生错误: {e}")
 

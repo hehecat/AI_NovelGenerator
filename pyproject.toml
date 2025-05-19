@@ -1,20 +1,10 @@
-[project]
-name = "ai-novelgenerator"
-version = "0.1.0"
-description = ""
-authors = [
-    {name = "hehecat",email = "hehecat@outlook.com"}
-]
-readme = "README.md"
 
-dependencies = [
-]
 [tool.poetry]
-name = "your-project"
+name = "ai-novelgenerator" 
 version = "0.1.0"
-description = "Your project description"
-authors = ["Your Name <you@example.com>"]
-readme = "README.md"
+description = "Your project description" 
+authors = ["hehecat <hehecat@outlook.com>"] 
+package-mode = false 
 
 [tool.poetry.dependencies]
 python = "^3.13"
@@ -40,12 +30,18 @@ anthropic = "^0.20.0"
 pytest = "^7.4.0"
 black = "^24.1.0"
 
+# 源配置: 将阿里云设为默认源
+[[tool.poetry.source]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+# 清华源可以作为备用，但不设为默认
 [[tool.poetry.source]]
 name = "tsinghua"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
-priority = "primary"  # 或设置为最高优先级
+
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0"] 
 build-backend = "poetry.core.masonry.api"
