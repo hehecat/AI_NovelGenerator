@@ -243,7 +243,7 @@ def Novel_architecture_generate(
     save_final_start = time.time()
     final_content = (
         "#=== 0) 小说设定 ===\n"
-        f"主题：{topic},类型：{genre},篇幅：约{number_of_chapters}章（每章{word_number}字）\n\n"
+        f"主题：{topic},类型：{genre},篇幅：约{num_volumes}卷 {number_of_chapters}章（每章{word_number}字）\n\n"
         "#=== 1) 核心种子 ===\n"
         f"{core_seed_result}\n\n"
         "#=== 2) 角色动力学 ===\n"

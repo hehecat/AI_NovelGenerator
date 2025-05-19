@@ -1,0 +1,51 @@
+[project]
+name = "ai-novelgenerator"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "hehecat",email = "hehecat@outlook.com"}
+]
+readme = "README.md"
+
+dependencies = [
+]
+[tool.poetry]
+name = "your-project"
+version = "0.1.0"
+description = "Your project description"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+requests = "^2.31.0"
+typing-extensions = "^4.9.0"
+nltk = "^3.8.1"
+sentence-transformers = "^2.2.2"
+keybert = "^0.7.0"
+customtkinter = "^5.2.0"
+langchain = "^0.3.0"
+langchain-openai = "^0.3.0"
+langchain-community = "^0.3.0"
+langchain-chroma = "^0.2.4"
+openai = "^1.12.0"
+google-generativeai = "^0.8.5"
+azure-ai-inference = "^1.0.0b9"
+
+[tool.poetry.group.optional.dependencies]
+google-cloud-aiplatform = "^1.45.0"
+anthropic = "^0.20.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^24.1.0"
+
+[[tool.poetry.source]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+priority = "primary"  # 或设置为最高优先级
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

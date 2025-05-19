@@ -25,7 +25,17 @@ from novel_generator.vectorstore_utils import (
 
 def get_last_n_chapters_text(chapters_dir: str, current_chapter_num: int, n: int = 3) -> list:
     """
-    从目录 chapters_dir 中获取最近 n 章的文本内容，返回文本列表。
+    获取最近n章的文本内容。
+    
+    从指定目录中读取当前章节之前的n章内容，用于生成新章节时提供上下文。
+    
+    Args:
+        chapters_dir (str): 章节文件所在的目录路径
+        current_chapter_num (int): 当前章节号
+        n (int, optional): 需要获取的最近章节数，默认为3
+        
+    Returns:
+        list: 包含最近n章文本内容的列表，如果某章不存在则对应位置为空字符串
     """
     texts = []
     start_chap = max(1, current_chapter_num - n)
@@ -46,14 +56,32 @@ def summarize_recent_chapters(
     temperature: float,
     max_tokens: int,
     chapters_text_list: list,
-    novel_number: int,            # 新增参数
-    chapter_info: dict,           # 新增参数
-    next_chapter_info: dict,      # 新增参数
+    novel_number: int,
+    chapter_info: dict,
+    next_chapter_info: dict,
     timeout: int = 600
-) -> str:  # 修改返回值类型为 str，不再是 tuple
+) -> str:
     """
-    根据前三章内容生成当前章节的精准摘要。
-    如果解析失败，则返回空字符串。
+    根据最近章节内容生成当前章节的精准摘要。
+    
+    使用LLM模型分析最近章节的内容，生成一个简洁的摘要，用于指导新章节的生成。
+    如果生成失败，则返回空字符串。
+    
+    Args:
+        interface_format (str): LLM接口格式（如"openai"）
+        api_key (str): API密钥
+        base_url (str): API基础URL
+        model_name (str): 使用的语言模型名称
+        temperature (float): 生成温度参数
+        max_tokens (int): 最大token限制
+        chapters_text_list (list): 最近章节的文本内容列表
+        novel_number (int): 当前章节号
+        chapter_info (dict): 当前章节的信息字典
+        next_chapter_info (dict): 下一章节的信息字典
+        timeout (int, optional): 超时时间（秒），默认为600
+        
+    Returns:
+        str: 生成的章节摘要，如果生成失败则返回空字符串
     """
     try:
         combined_text = "\n".join(chapters_text_list).strip()
@@ -113,7 +141,18 @@ def summarize_recent_chapters(
         return ""
 
 def extract_summary_from_response(response_text: str) -> str:
-    """从响应文本中提取摘要部分"""
+    """
+    从LLM响应文本中提取摘要部分。
+    
+    通过识别特定的摘要标记来提取摘要内容。如果找不到标记，
+    则返回整个响应文本。
+    
+    Args:
+        response_text (str): LLM的响应文本
+        
+    Returns:
+        str: 提取出的摘要文本，如果提取失败则返回原文本
+    """
     if not response_text:
         return ""
         
@@ -134,7 +173,18 @@ def extract_summary_from_response(response_text: str) -> str:
     return response_text.strip()
 
 def format_chapter_info(chapter_info: dict) -> str:
-    """将章节信息字典格式化为文本"""
+    """
+    将章节信息字典格式化为易读的文本格式。
+    
+    将包含章节各种信息的字典转换为结构化的文本格式，
+    包括章节编号、标题、定位、核心作用等信息。
+    
+    Args:
+        chapter_info (dict): 包含章节信息的字典
+        
+    Returns:
+        str: 格式化后的章节信息文本
+    """
     template = """
 章节编号：第{number}章
 章节标题：《{title}》
@@ -163,7 +213,18 @@ def format_chapter_info(chapter_info: dict) -> str:
     )
 
 def parse_search_keywords(response_text: str) -> list:
-    """解析新版关键词格式（示例输入：'科技公司·数据泄露\n地下实验室·基因编辑'）"""
+    """
+    解析新版关键词格式。
+    
+    从响应文本中提取关键词组，每组关键词由"·"分隔。
+    例如：'科技公司·数据泄露\n地下实验室·基因编辑'
+    
+    Args:
+        response_text (str): 包含关键词的响应文本
+        
+    Returns:
+        list: 最多5组关键词的列表，每组关键词中的"·"被替换为空格
+    """
     return [
         line.strip().replace('·', ' ')
         for line in response_text.strip().split('\n')
@@ -171,7 +232,22 @@ def parse_search_keywords(response_text: str) -> list:
     ][:5]  # 最多取5组
 
 def apply_content_rules(texts: list, novel_number: int) -> list:
-    """应用内容处理规则"""
+    """
+    应用内容处理规则。
+    
+    根据文本内容与当前章节的时间距离，应用不同的处理规则：
+    - 距离≤2章：跳过内容
+    - 距离3-5章：需要修改≥40%
+    - 距离>5章：可以引用核心内容
+    - 非章节内容：优先使用
+    
+    Args:
+        texts (list): 待处理的文本列表
+        novel_number (int): 当前章节号
+        
+    Returns:
+        list: 处理后的文本列表，每个文本前添加处理标记
+    """
     processed = []
     for text in texts:
         if re.search(r'第[\d]+章', text) or re.search(r'chapter_[\d]+', text):
@@ -189,24 +265,131 @@ def apply_content_rules(texts: list, novel_number: int) -> list:
             processed.append(f"[PRIOR] {text}（优先使用）")
     return processed
 
-def apply_knowledge_rules(contexts: list, chapter_num: int) -> list:
-    """应用知识库使用规则"""
+def is_foreshadowing_content(text: str, chapter_info: dict) -> bool:
+    """
+    轻量级判断内容是否是伏笔或需要呼应的情节
+    
+    Args:
+        text: 待判断的文本内容
+        chapter_info: 当前章节信息
+    """
+    # 1. 特征提取
+    features = {
+        # 情节特征
+        "plot_features": {
+            "has_question": bool(re.search(r'[？?]', text)),  # 问句
+            "has_unknown": bool(re.search(r'[不未]知|神秘|奇怪|疑惑', text)),  # 未知描述
+            "has_future": bool(re.search(r'[将可能或许]|以后|未来|之后', text)),  # 未来暗示
+            "has_plot_hook": bool(re.search(r'[但然而却]|不过|可是', text)),  # 情节钩子
+        },
+        
+        # 角色特征
+        "character_features": {
+            "has_new_character": bool(re.search(r'[一]个.*[人者]|.*[出现遇到]', text)),  # 新角色
+            "has_character_hint": bool(re.search(r'[眼神表情]中|似乎|好像|仿佛', text)),  # 角色暗示
+            "has_character_background": bool(re.search(r'[身份背景]|来历|过去|曾经', text)),  # 角色背景
+        },
+        
+        # 道具特征
+        "item_features": {
+            "has_new_item": bool(re.search(r'[一]个.*[物品道具]|.*[发现获得]', text)),  # 新道具
+            "has_item_hint": bool(re.search(r'[特殊奇怪]|不同寻常|不一般', text)),  # 道具暗示
+            "has_item_effect": bool(re.search(r'[效果作用]|能力|力量', text)),  # 道具效果
+        }
+    }
+    
+    # 2. 规则判断
+    def check_plot_foreshadowing(features: dict) -> bool:
+        """检查情节伏笔"""
+        plot = features["plot_features"]
+        return (plot["has_question"] and plot["has_unknown"]) or \
+               (plot["has_future"] and plot["has_plot_hook"])
+    
+    def check_character_foreshadowing(features: dict) -> bool:
+        """检查角色伏笔"""
+        char = features["character_features"]
+        return (char["has_new_character"] and char["has_character_hint"]) or \
+               (char["has_new_character"] and char["has_character_background"])
+    
+    def check_item_foreshadowing(features: dict) -> bool:
+        """检查道具伏笔"""
+        item = features["item_features"]
+        return (item["has_new_item"] and item["has_item_hint"]) or \
+               (item["has_new_item"] and item["has_item_effect"])
+    
+    # 3. 与当前章节伏笔设计的相关性检查
+    def check_chapter_relevance(text: str, chapter_info: dict) -> bool:
+        """检查与当前章节伏笔设计的相关性"""
+        if not chapter_info.get("foreshadowing"):
+            return False
+        keywords = set(chapter_info["foreshadowing"].split())
+        return any(keyword in text for keyword in keywords)
+    
+    # 4. 主判断逻辑
+    try:
+        # 检查各类伏笔
+        is_plot_foreshadowing = check_plot_foreshadowing(features)
+        is_character_foreshadowing = check_character_foreshadowing(features)
+        is_item_foreshadowing = check_item_foreshadowing(features)
+        
+        # 检查与当前章节的相关性
+        is_chapter_relevant = check_chapter_relevance(text, chapter_info)
+        
+        # 综合判断
+        is_foreshadowing = is_plot_foreshadowing or \
+                          is_character_foreshadowing or \
+                          is_item_foreshadowing or \
+                          is_chapter_relevant
+        
+        # 记录判断结果
+        if is_foreshadowing:
+            logging.debug(f"检测到伏笔内容：{text[:50]}...")
+            logging.debug(f"特征分析：{features}")
+        
+        return is_foreshadowing
+        
+    except Exception as e:
+        logging.error(f"伏笔判断出错：{str(e)}")
+        return False
+
+def apply_knowledge_rules(contexts: list, chapter_num: int, chapter_info: dict) -> list:
+    """
+    应用知识库使用规则。
+    
+    根据文本内容类型和与当前章节的时间距离，应用不同的处理规则：
+    - 历史章节内容：
+      * 距离≤3章：跳过
+      * 距离>3章：需要30%以上改写
+    - 伏笔内容：优先使用
+    - 第三方知识：优先处理
+    
+    Args:
+        contexts (list): 待处理的上下文列表
+        chapter_num (int): 当前章节号
+        chapter_info (dict): 当前章节信息
+        
+    Returns:
+        list: 处理后的上下文列表，每个文本前添加处理标记
+    """
     processed = []
     for text in contexts:
-        # 检测历史章节内容
+        # 1. 检查是否是伏笔内容
+        if is_foreshadowing_content(text, chapter_info):
+            processed.append(f"[伏笔呼应] {text} (优先使用)")
+            continue
+            
+        # 2. 检查是否是历史章节内容
         if "第" in text and "章" in text:
             # 提取章节号判断时间远近
             chap_nums = [int(s) for s in text.split() if s.isdigit()]
             recent_chap = max(chap_nums) if chap_nums else 0
             time_distance = chapter_num - recent_chap
             
-            # 相似度处理规则
             if time_distance <= 3:  # 近三章内容
                 processed.append(f"[历史章节限制] 跳过近期内容: {text[:50]}...")
-                continue
-                
-            # 允许引用但需要转换
-            processed.append(f"[历史参考] {text} (需进行30%以上改写)")
+            else:
+                # 允许引用但需要转换
+                processed.append(f"[历史参考] {text} (需进行30%以上改写)")
         else:
             # 第三方知识优先处理
             processed.append(f"[外部知识] {text}")
@@ -224,23 +407,42 @@ def get_filtered_knowledge_context(
     max_tokens: int = 2048,
     timeout: int = 600
 ) -> str:
-    """优化后的知识过滤处理"""
+    """
+    优化后的知识过滤处理。
+    
+    对检索到的知识内容进行过滤和处理，确保内容与当前章节相关且合适。
+    处理步骤：
+    1. 应用知识规则处理检索文本
+    2. 限制文本长度
+    3. 使用LLM进行内容过滤
+    
+    Args:
+        api_key (str): API密钥
+        base_url (str): API基础URL
+        model_name (str): 使用的语言模型名称
+        interface_format (str): LLM接口格式
+        embedding_adapter: 向量嵌入适配器
+        filepath (str): 文件路径
+        chapter_info (dict): 当前章节信息
+        retrieved_texts (list): 检索到的文本列表
+        max_tokens (int, optional): 最大token限制，默认为2048
+        timeout (int, optional): 超时时间（秒），默认为600
+        
+    Returns:
+        str: 过滤后的知识内容，如果处理失败则返回错误提示
+    """
     if not retrieved_texts:
         return "（无相关知识库内容）"
 
     try:
-        processed_texts = apply_knowledge_rules(retrieved_texts, chapter_info.get('chapter_number', 0))
-        llm_adapter = create_llm_adapter(
-            interface_format=interface_format,
-            base_url=base_url,
-            model_name=model_name,
-            api_key=api_key,
-            temperature=0.3,
-            max_tokens=max_tokens,
-            timeout=timeout
+        # 应用知识规则
+        processed_texts = apply_knowledge_rules(
+            retrieved_texts, 
+            chapter_info.get('chapter_number', 0),
+            chapter_info
         )
         
-        # 限制检索文本长度并格式化
+        # 限制文本长度并格式化
         formatted_texts = []
         max_text_length = 600
         for i, text in enumerate(processed_texts, 1):
@@ -257,16 +459,28 @@ def get_filtered_knowledge_context(
             f"{chapter_info.get('scene_location', '')}"
         )
 
+        # 构造提示词
         prompt = knowledge_filter_prompt.format(
             chapter_info=formatted_chapter_info,
             retrieved_texts="\n\n".join(formatted_texts) if formatted_texts else "（无检索结果）"
+        )
+        
+        # 调用LLM进行过滤
+        llm_adapter = create_llm_adapter(
+            interface_format=interface_format,
+            base_url=base_url,
+            model_name=model_name,
+            api_key=api_key,
+            temperature=0.3,
+            max_tokens=max_tokens,
+            timeout=timeout
         )
         
         filtered_content = invoke_with_cleaning(llm_adapter, prompt)
         return filtered_content if filtered_content else "（知识内容过滤失败）"
         
     except Exception as e:
-        logging.error(f"Error in knowledge filtering: {str(e)}")
+        logging.error(f"知识过滤过程出错：{str(e)}")
         return "（内容过滤过程出错）"
 
 def build_chapter_prompt(
@@ -292,11 +506,39 @@ def build_chapter_prompt(
     timeout: int = 600
 ) -> str:
     """
-    构造当前章节的请求提示词（完整实现版）
-    修改重点：
-    1. 优化知识库检索流程
-    2. 新增内容重复检测机制
-    3. 集成提示词应用规则
+    构造当前章节的请求提示词。
+    
+    功能：
+    1. 读取基础文件（架构、目录、全局摘要、角色状态）
+    2. 获取当前章节和下一章节的信息
+    3. 获取前文内容和摘要
+    4. 进行知识库检索和处理
+    5. 构造完整的提示词
+    
+    Args:
+        api_key (str): API密钥
+        base_url (str): API基础URL
+        model_name (str): 使用的语言模型名称
+        filepath (str): 文件路径
+        novel_number (int): 当前章节号
+        word_number (int): 目标字数
+        temperature (float): 生成温度参数
+        user_guidance (str): 用户指导
+        characters_involved (str): 涉及的角色
+        key_items (str): 关键道具
+        scene_location (str): 场景地点
+        time_constraint (str): 时间约束
+        embedding_api_key (str): 向量嵌入API密钥
+        embedding_url (str): 向量嵌入API URL
+        embedding_interface_format (str): 向量嵌入接口格式
+        embedding_model_name (str): 向量嵌入模型名称
+        embedding_retrieval_k (int, optional): 检索数量，默认为2
+        interface_format (str, optional): LLM接口格式，默认为"openai"
+        max_tokens (int, optional): 最大token限制，默认为2048
+        timeout (int, optional): 超时时间（秒），默认为600
+        
+    Returns:
+        str: 构造好的提示词文本
     """
     # 读取基础文件
     arch_file = os.path.join(filepath, "Novel_architecture.txt")
@@ -534,7 +776,38 @@ def generate_chapter_draft(
     custom_prompt_text: str = None
 ) -> str:
     """
-    生成章节草稿，支持自定义提示词
+    生成章节草稿。
+    
+    功能：
+    1. 构造提示词（使用自定义提示词或通过build_chapter_prompt生成）
+    2. 调用LLM生成章节内容
+    3. 保存生成的章节到文件
+    
+    Args:
+        api_key (str): API密钥
+        base_url (str): API基础URL
+        model_name (str): 使用的语言模型名称
+        filepath (str): 文件路径
+        novel_number (int): 当前章节号
+        word_number (int): 目标字数
+        temperature (float): 生成温度参数
+        user_guidance (str): 用户指导
+        characters_involved (str): 涉及的角色
+        key_items (str): 关键道具
+        scene_location (str): 场景地点
+        time_constraint (str): 时间约束
+        embedding_api_key (str): 向量嵌入API密钥
+        embedding_url (str): 向量嵌入API URL
+        embedding_interface_format (str): 向量嵌入接口格式
+        embedding_model_name (str): 向量嵌入模型名称
+        embedding_retrieval_k (int, optional): 检索数量，默认为2
+        interface_format (str, optional): LLM接口格式，默认为"openai"
+        max_tokens (int, optional): 最大token限制，默认为2048
+        timeout (int, optional): 超时时间（秒），默认为600
+        custom_prompt_text (str, optional): 自定义提示词，默认为None
+        
+    Returns:
+        str: 生成的章节内容
     """
     if custom_prompt_text is None:
         prompt_text = build_chapter_prompt(
