@@ -190,25 +190,27 @@ def format_chapter_info(chapter_info: dict) -> str:
 章节标题：《{title}》
 章节定位：{role}
 核心作用：{purpose}
+核心悬念：{suspense}
+情感基调：{emotion}
+伏笔操作：{foreshadow}
+认知颠覆：{twist}
 主要人物：{characters}
 关键道具：{items}
 场景地点：{location}
-伏笔设计：{foreshadow}
-悬念密度：{suspense}
-转折程度：{twist}
-章节简述：{summary}
+章节梗概：{summary}
 """
     return template.format(
         number=chapter_info.get('chapter_number', '未知'),
         title=chapter_info.get('chapter_title', '未知'),
         role=chapter_info.get('chapter_role', '未知'),
         purpose=chapter_info.get('chapter_purpose', '未知'),
+        suspense=chapter_info.get('suspense_level', '未知'),
+        emotion=chapter_info.get('emotion_tone', '未知'),
+        foreshadow=chapter_info.get('foreshadowing', '无'),
+        twist=chapter_info.get('plot_twist_level', '★☆☆☆☆'),
         characters=chapter_info.get('characters_involved', '未指定'),
         items=chapter_info.get('key_items', '未指定'),
         location=chapter_info.get('scene_location', '未指定'),
-        foreshadow=chapter_info.get('foreshadowing', '无'),
-        suspense=chapter_info.get('suspense_level', '一般'),
-        twist=chapter_info.get('plot_twist_level', '★☆☆☆☆'),
         summary=chapter_info.get('chapter_summary', '未提供')
     )
 
@@ -514,37 +516,16 @@ def build_chapter_prompt(
     3. 获取前文内容和摘要
     4. 进行知识库检索和处理
     5. 构造完整的提示词
-    
-    Args:
-        api_key (str): API密钥
-        base_url (str): API基础URL
-        model_name (str): 使用的语言模型名称
-        filepath (str): 文件路径
-        novel_number (int): 当前章节号
-        word_number (int): 目标字数
-        temperature (float): 生成温度参数
-        user_guidance (str): 用户指导
-        characters_involved (str): 涉及的角色
-        key_items (str): 关键道具
-        scene_location (str): 场景地点
-        time_constraint (str): 时间约束
-        embedding_api_key (str): 向量嵌入API密钥
-        embedding_url (str): 向量嵌入API URL
-        embedding_interface_format (str): 向量嵌入接口格式
-        embedding_model_name (str): 向量嵌入模型名称
-        embedding_retrieval_k (int, optional): 检索数量，默认为2
-        interface_format (str, optional): LLM接口格式，默认为"openai"
-        max_tokens (int, optional): 最大token限制，默认为2048
-        timeout (int, optional): 超时时间（秒），默认为600
-        
-    Returns:
-        str: 构造好的提示词文本
     """
     # 读取基础文件
     arch_file = os.path.join(filepath, "Novel_architecture.txt")
     novel_architecture_text = read_file(arch_file)
-    directory_file = os.path.join(filepath, "Novel_directory.txt")
+    
+    # 从 novel_number 推断卷号
+    volume_number = (novel_number - 1) // 100 + 1  # 假设每卷100章
+    directory_file = os.path.join(filepath, f"Novel_directory_vol{volume_number}.txt")
     blueprint_text = read_file(directory_file)
+    
     global_summary_file = os.path.join(filepath, "global_summary.txt")
     global_summary_text = read_file(global_summary_file)
     character_state_file = os.path.join(filepath, "character_state.txt")
@@ -571,6 +552,8 @@ def build_chapter_prompt(
     next_chapter_twist = next_chapter_info.get("plot_twist_level", "★☆☆☆☆")
     next_chapter_summary = next_chapter_info.get("chapter_summary", "衔接过渡内容")
 
+    print('chapter_info', chapter_info)
+    print('next_chapter_info', next_chapter_info)
     # 创建章节目录
     chapters_dir = os.path.join(filepath, "chapters")
     os.makedirs(chapters_dir, exist_ok=True)
